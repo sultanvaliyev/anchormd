@@ -1,0 +1,44 @@
+{
+  "name": "anchormd",
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Persistent project context for AI coding agents using linked markdown plans with hybrid search",
+  "main": "src/cli.ts",
+  "bin": {
+    "anchormd": "./bin/anchormd"
+  },
+  "scripts": {
+    "build": "bun build src/cli.ts --outdir dist --target bun",
+    "dev": "bun run src/cli.ts",
+    "test": "bun test"
+  },
+  "files": [
+    "src/",
+    "bin/",
+    "skill/"
+  ],
+  "keywords": [
+    "ai",
+    "cli",
+    "markdown",
+    "plans",
+    "context",
+    "coding-agent",
+    "project-management",
+    "knowledge-graph"
+  ],
+  "author": "Sultan Valiyev",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/sultanvaliyev/anchormd.git"
+  },
+  "dependencies": {
+    "@tobilu/qmd": "^2.0.1",
+    "commander": "^13.1.0",
+    "yaml": "^2.8.0"
+  },
+  "devDependencies": {
+    "bun-types": "^1.2.0"
+  }
+}
