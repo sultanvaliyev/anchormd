@@ -10,6 +10,14 @@ AnchorMD requires [Bun](https://bun.sh) runtime.
 curl -fsSL https://bun.sh/install | bash
 ```
 
+**macOS**: For full search support (semantic + hybrid), install Homebrew SQLite:
+
+```bash
+brew install sqlite
+```
+
+This is needed because macOS ships with Apple's SQLite which doesn't support extension loading. Lexical search (BM25) works without it.
+
 ## Install
 
 ```bash
@@ -63,7 +71,7 @@ anchormd status
 | `anchormd write <name> [--from <file>]` | Write or update a plan (reads from file, stdin, or editor) |
 | `anchormd ls [--status <s>] [--json]` | List all plans, optionally filtered by status |
 | `anchormd read <name[#section]>` | Read a plan or a specific section via deep link |
-| `anchormd find <query> [--semantic] [--hybrid] [--limit <n>] [--json]` | Search plans (requires QMD) |
+| `anchormd find <query> [--semantic] [--hybrid] [--limit <n>] [--json]` | Search plans with deep links to matching sections |
 | `anchormd reindex` | Rebuild the index graph and search database |
 | `anchormd status` | Show plan count, links, weak edges, and QMD status |
 
@@ -102,17 +110,56 @@ When two plans reference the same entity (e.g., both mention `src/auth/config.ts
 
 The index graph (`.anchor/index.json`) tracks all plans, their links, entities, and weak edges. It's rebuilt automatically when plans are written, or manually via `anchormd reindex`.
 
+## Search
+
+AnchorMD uses [QMD](https://github.com/tobilu/qmd) for search. Three modes are available:
+
+- **Lexical** (default): BM25 keyword search — fast, no dependencies beyond SQLite
+- **Semantic**: Vector similarity search — requires sqlite-vec (`brew install sqlite` on macOS)
+- **Hybrid**: Combined lexical + semantic with LLM reranking
+
+Search results include **deep links** to the most relevant section:
+
+```bash
+$ anchormd find "sentiment analysis"
+  1. [0.823] myproject/analytics-prd.md
+     → analytics-prd#sentiment-tab
+```
+
+Use the deep link directly: `anchormd read analytics-prd#sentiment-tab`
+
 ## Configuration
 
 Configuration is stored in `.anchor/config.json`:
 
 ```json
 {
-  "qmd": false
+  "qmd": true,
+  "collectionName": "my-project"
 }
 ```
 
-- **qmd**: Enable/disable QMD search integration (enabled by default).
+- **qmd**: Enable/disable QMD search integration (enabled by default)
+- **collectionName**: Project's collection name in the central search database (auto-derived from directory name)
+
+## Central Search Database
+
+AnchorMD stores all search data in a single central database at `~/.anchormd/anchormd.sqlite`. Each project is registered as a named collection, enabling:
+
+- No per-project SQLite files to gitignore
+- Collection-scoped search (each project only sees its own plans)
+- Future cross-project search capabilities
+
+### Upgrading from v0.1.x
+
+If you used an earlier version with per-project `.anchor/search.sqlite`:
+
+```bash
+bun add -g anchormd@latest
+anchormd reindex  # auto-migrates to central DB
+```
+
+The old `.anchor/search.sqlite` can be safely deleted.
 
 ## Claude Code Integration
 
@@ -129,10 +176,12 @@ AnchorMD ships with a skill file at `skill/SKILL.md` for integration with Claude
 .anchor/
   config.json       # Project configuration
   index.json        # Relationship graph
-  search.sqlite     # QMD search database (gitignored)
   plans/
     anchor.md       # Project overview (created on init)
     *.md            # Your plan files
+
+~/.anchormd/
+  anchormd.sqlite   # Central search database (shared across all projects)
 ```
 
 ## License

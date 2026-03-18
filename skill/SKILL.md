@@ -15,8 +15,8 @@ You have access to AnchorMD, a project context system that gives you persistent,
 ## Workflow
 
 1. **At session start**: Run `anchormd context` to load the project overview and see all plans.
-2. **Before starting a task**: Run `anchormd find "<topic>"` to find relevant plans (or `anchormd ls` to browse).
-3. **Read details**: Use `anchormd read <plan>` to get the full content of a plan. Use `anchormd read <plan>#<section>` for a specific section.
+2. **Before starting a task**: Run `anchormd find "<topic>"` to find relevant plans. Results include deep links (e.g. `plan#section`) — use them directly with `anchormd read`.
+3. **Read details**: Use `anchormd read <plan>` for full content, or `anchormd read <plan>#<section>` to jump to a specific section.
 4. **After implementing**: Update plans with `anchormd write <plan-name>` to reflect what was built.
 5. **Track progress**: Use `anchormd ls --status in-progress` to see active work items.
 
