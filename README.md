@@ -2,10 +2,18 @@
 
 Persistent project context for AI coding agents using linked markdown plans with relationship tracking and hybrid search.
 
+## Prerequisites
+
+AnchorMD requires [Bun](https://bun.sh) runtime.
+
+```bash
+curl -fsSL https://bun.sh/install | bash
+```
+
 ## Install
 
 ```bash
-npm install -g anchormd
+bun add -g anchormd
 ```
 
 ## Quick Start
@@ -104,7 +112,7 @@ Configuration is stored in `.anchor/config.json`:
 }
 ```
 
-- **qmd**: Enable/disable QMD search integration. Set to `false` by default since QMD currently requires the Bun runtime.
+- **qmd**: Enable/disable QMD search integration (enabled by default).
 
 ## Claude Code Integration
 

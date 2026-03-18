@@ -1,6 +1,6 @@
 {
   "name": "anchormd",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "type": "module",
   "description": "Persistent project context for AI coding agents using linked markdown plans with hybrid search",
   "main": "src/cli.ts",
@@ -27,6 +27,9 @@
     "project-management",
     "knowledge-graph"
   ],
+  "engines": {
+    "bun": ">=1.0.0"
+  },
   "author": "Sultan Valiyev",
   "license": "MIT",
   "repository": {
