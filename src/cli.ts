@@ -452,7 +452,7 @@ function openInteractiveGraph(graph: IndexGraph, plansDir: string, projectRoot: 
   body { background: #1a1a2e; overflow: hidden; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif; }
   svg { display: block; }
   .link-strong { stroke: rgba(139, 92, 246, 0.5); stroke-width: 1.5; }
-  .link-weak { stroke: rgba(100, 116, 139, 0.25); stroke-width: 1; stroke-dasharray: 4 3; }
+  .link-weak { stroke: rgba(148, 163, 184, 0.45); stroke-width: 1.2; stroke-dasharray: 5 4; }
   .node circle { cursor: grab; stroke-width: 2; }
   .node circle:hover { filter: brightness(1.3); }
   .node text { fill: #e2e8f0; font-size: 12px; pointer-events: none; text-anchor: middle; }
