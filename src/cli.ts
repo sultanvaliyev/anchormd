@@ -19,7 +19,7 @@ import { color, formatPlanTable, formatSearchResults, formatStatus } from './for
 import type { PlanStatus } from './types.js';
 import { VALID_STATUSES } from './types.js';
 
-const VERSION = '0.2.0';
+const VERSION = '0.2.1';
 
 const program = new Command();
 
@@ -352,7 +352,7 @@ function extractSection(body: string, sectionSlug: string): string | null {
         }
       }
 
-      if (slug === targetSlug) {
+      if (slug === targetSlug || slug.endsWith('-' + targetSlug)) {
         capturing = true;
         captureLevel = level;
       }

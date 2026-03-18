@@ -98,8 +98,12 @@ export function formatSearchResults(results: SearchResult[]): string {
     const r = results[i];
     const num = color.dim(`${i + 1}.`);
     const score = color.yellow(`[${r.score.toFixed(3)}]`);
-    const path = color.bold(r.path);
-    lines.push(`  ${num} ${score} ${path}`);
+    const filePath = color.bold(r.path);
+    lines.push(`  ${num} ${score} ${filePath}`);
+
+    if (r.deepLink) {
+      lines.push(`     ${color.cyan('→')} ${color.cyan(r.deepLink)}`);
+    }
 
     if (r.content) {
       // Show a truncated preview of the content

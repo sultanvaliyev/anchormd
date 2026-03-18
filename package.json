@@ -1,6 +1,6 @@
 {
   "name": "anchormd",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "type": "module",
   "description": "Persistent project context for AI coding agents using linked markdown plans with hybrid search",
   "main": "src/cli.ts",

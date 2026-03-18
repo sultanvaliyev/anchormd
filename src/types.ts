@@ -71,4 +71,6 @@ export interface SearchResult {
   path: string;
   score: number;
   content?: string;
+  /** Deep link to the most relevant section, e.g. "plan-name#section-slug" */
+  deepLink?: string;
 }

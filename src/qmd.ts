@@ -249,6 +249,102 @@ export async function reindexQmd(store: QmdStore | null, collectionName?: string
 }
 
 /**
+ * Slugify a heading text to a URL-friendly fragment.
+ */
+function slugify(text: string): string {
+  return text
+    .toLowerCase()
+    .replace(/[^a-z0-9\s-]/g, '')
+    .replace(/\s+/g, '-')
+    .replace(/-+/g, '-')
+    .replace(/^-|-$/g, '');
+}
+
+/**
+ * Parse all headings from markdown content into sections with their line ranges.
+ */
+function parseHeadings(content: string): Array<{ slug: string; start: number; level: number }> {
+  const lines = content.split('\n');
+  const headings: Array<{ slug: string; start: number; level: number }> = [];
+
+  for (let i = 0; i < lines.length; i++) {
+    const match = lines[i].match(/^(#{1,6})\s+(.+)$/);
+    if (match) {
+      headings.push({ slug: slugify(match[2]), start: i, level: match[1].length });
+    }
+  }
+
+  return headings;
+}
+
+/**
+ * Find the best matching section for a query within content.
+ * Returns the section slug if a strong match is found, undefined otherwise.
+ */
+function findBestSection(content: string, query: string): string | undefined {
+  const headings = parseHeadings(content);
+  if (headings.length <= 1) return undefined; // No sub-sections to link to
+
+  const queryTerms = query.toLowerCase().split(/\s+/).filter(t => t.length > 2);
+  if (queryTerms.length === 0) return undefined;
+
+  const lines = content.split('\n');
+
+  let bestSlug: string | undefined;
+  let bestScore = 0;
+
+  for (let h = 0; h < headings.length; h++) {
+    const heading = headings[h];
+    // Skip the top-level heading (# Title) — that's the whole plan
+    if (heading.level === 1) continue;
+
+    const sectionEnd = h + 1 < headings.length ? headings[h + 1].start : lines.length;
+    const sectionText = lines.slice(heading.start, sectionEnd).join(' ').toLowerCase();
+
+    // Score: count how many query terms appear in this section
+    let score = 0;
+    for (const term of queryTerms) {
+      if (sectionText.includes(term)) score++;
+    }
+
+    // Bonus for heading itself containing query terms
+    const headingText = heading.slug;
+    for (const term of queryTerms) {
+      if (headingText.includes(term)) score += 2;
+    }
+
+    if (score > bestScore) {
+      bestScore = score;
+      bestSlug = heading.slug;
+    }
+  }
+
+  // Only return if at least half the query terms matched
+  if (bestScore >= queryTerms.length) {
+    return bestSlug;
+  }
+
+  return undefined;
+}
+
+/**
+ * Enrich search results with deep links to the best matching section.
+ */
+function enrichWithDeepLinks(results: SearchResult[], query: string): SearchResult[] {
+  for (const result of results) {
+    if (!result.content) continue;
+
+    const sectionSlug = findBestSection(result.content, query);
+    if (sectionSlug) {
+      // Strip collection prefix and .md extension to get plan name
+      const planName = result.path.replace(/\.md$/, '').replace(/^[^/]+\//, '');
+      result.deepLink = `${planName}#${sectionSlug}`;
+    }
+  }
+  return results;
+}
+
+/**
  * Search using QMD, scoped to a specific collection.
  *
  * Supports three modes:
@@ -272,33 +368,33 @@ export async function searchQmd(
   }
 
   // Fall back to lexical if semantic/hybrid requested but sqlite-vec is unavailable
+  let effectiveMode = options.mode;
   if (!sqliteVecAvailable && (options.mode === 'semantic' || options.mode === 'hybrid')) {
     console.error(color.yellow(`Warning: ${options.mode} search requires sqlite-vec. Falling back to lexical search.`));
-    const results = await store.searchLex(query, { limit: options.limit, collection: options.collection });
-    return results.map(r => ({
-      path: r.displayPath,
-      score: r.score,
-      content: r.body,
-    }));
+    effectiveMode = 'lexical';
   }
 
-  switch (options.mode) {
+  let mapped: SearchResult[];
+
+  switch (effectiveMode) {
     case 'lexical': {
       const results = await store.searchLex(query, { limit: options.limit, collection: options.collection });
-      return results.map(r => ({
+      mapped = results.map(r => ({
         path: r.displayPath,
         score: r.score,
         content: r.body,
       }));
+      break;
     }
 
     case 'semantic': {
       const results = await store.searchVector(query, { limit: options.limit, collection: options.collection });
-      return results.map(r => ({
+      mapped = results.map(r => ({
         path: r.displayPath,
         score: r.score,
         content: r.body,
       }));
+      break;
     }
 
     case 'hybrid': {
@@ -307,11 +403,14 @@ export async function searchQmd(
         limit: options.limit,
         collection: options.collection,
       });
-      return results.map(r => ({
+      mapped = results.map(r => ({
         path: r.displayPath,
         score: r.score,
         content: r.bestChunk,
       }));
+      break;
     }
   }
+
+  return enrichWithDeepLinks(mapped, query);
 }
