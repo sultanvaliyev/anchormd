@@ -2,37 +2,49 @@
  * QMD integration layer
  *
  * Integrates @tobilu/qmd for hybrid search over plan files.
- * Requires Bun runtime (QMD uses better-sqlite3 and sqlite-vec).
+ * Uses dynamic import so the CLI doesn't crash if sqlite-vec is unavailable.
  */
 
 import path from 'node:path';
-import { createStore, type QMDStore } from '@tobilu/qmd';
+import { color } from './format.js';
 import type { AnchorConfig, SearchResult } from './types.js';
 
-export type QmdStore = QMDStore;
+// We can't use the actual QMDStore type at the top level since the import
+// itself may fail (sqlite-vec). Use an opaque wrapper instead.
+export type QmdStore = {
+  update(): Promise<void>;
+  embed(): Promise<void>;
+  searchLex(query: string, opts: { limit: number }): Promise<Array<{ displayPath: string; score: number; body: string }>>;
+  searchVector(query: string, opts: { limit: number }): Promise<Array<{ displayPath: string; score: number; body: string }>>;
+  search(opts: { query: string; limit: number }): Promise<Array<{ displayPath: string; score: number; bestChunk: string }>>;
+  close(): Promise<void>;
+};
 
-// Cache the store instance to avoid recreating it on every call
-let cachedStore: QMDStore | null = null;
+// Cache the store instance
+let cachedStore: QmdStore | null = null;
 let cachedStoreKey: string | null = null;
+let qmdUnavailable = false;
 
 /**
  * Get a QMD store instance.
  *
- * Creates a QMD store backed by `.anchor/search.sqlite` with a single
- * collection pointing at `.anchor/plans/`. The store is cached so
- * subsequent calls with the same anchorDir reuse the same instance.
- *
- * Returns null when QMD is disabled in config.
+ * Dynamically imports @tobilu/qmd so the CLI works even when sqlite-vec
+ * is missing. Returns null when QMD is disabled or unavailable.
  */
-export async function getQmdStore(anchorDir: string, config: AnchorConfig): Promise<QMDStore | null> {
+export async function getQmdStore(anchorDir: string, config: AnchorConfig): Promise<QmdStore | null> {
   if (config.qmd === false) {
+    return null;
+  }
+
+  // If we already know QMD can't load, don't retry
+  if (qmdUnavailable) {
     return null;
   }
 
   const dbPath = path.join(anchorDir, 'search.sqlite');
   const plansPath = path.join(anchorDir, 'plans');
 
-  // Return cached store if it matches the same anchor directory
+  // Return cached store if it matches
   if (cachedStore && cachedStoreKey === anchorDir) {
     return cachedStore;
   }
@@ -44,33 +56,42 @@ export async function getQmdStore(anchorDir: string, config: AnchorConfig): Prom
     cachedStoreKey = null;
   }
 
-  const store = await createStore({
-    dbPath,
-    config: {
-      collections: {
-        plans: {
-          path: plansPath,
-          pattern: '**/*.md',
+  try {
+    const { createStore } = await import('@tobilu/qmd');
+
+    const store = await createStore({
+      dbPath,
+      config: {
+        collections: {
+          plans: {
+            path: plansPath,
+            pattern: '**/*.md',
+          },
         },
       },
-    },
-  });
+    }) as unknown as QmdStore;
 
-  cachedStore = store;
-  cachedStoreKey = anchorDir;
+    cachedStore = store;
+    cachedStoreKey = anchorDir;
 
-  return store;
+    return store;
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    if (msg.includes('sqlite-vec') || msg.includes('extension') || msg.includes('loadExtension')) {
+      console.error(color.yellow('Warning: QMD unavailable — sqlite-vec extension not found.'));
+      console.error(color.dim('  Run `anchormd init --no-qmd` or install sqlite-vec for your platform.'));
+      qmdUnavailable = true;
+      return null;
+    }
+    throw err;
+  }
 }
 
 /**
  * Reindex the QMD search database.
- *
- * Scans the plans directory for new/changed/removed files and updates
- * the FTS and vector indexes.
- *
  * No-op when QMD is disabled or unavailable.
  */
-export async function reindexQmd(store: QMDStore | null): Promise<void> {
+export async function reindexQmd(store: QmdStore | null): Promise<void> {
   if (store === null) {
     return;
   }
@@ -83,22 +104,22 @@ export async function reindexQmd(store: QMDStore | null): Promise<void> {
  * Search using QMD.
  *
  * Supports three modes:
- * - lexical: BM25 full-text search (fast, no LLM)
- * - semantic: vector similarity search (uses embedding model)
- * - hybrid: full pipeline with query expansion, multi-signal retrieval, and LLM reranking
+ * - lexical: BM25 full-text search
+ * - semantic: vector similarity search
+ * - hybrid: multi-signal retrieval with LLM reranking
  *
  * Throws a helpful error when QMD is not available.
  */
 export async function searchQmd(
-  store: QMDStore | null,
+  store: QmdStore | null,
   query: string,
   options: { mode: 'lexical' | 'semantic' | 'hybrid'; limit: number }
 ): Promise<SearchResult[]> {
   if (store === null) {
     throw new Error(
-      'QMD search is not available. Ensure QMD is enabled in your project config.\n' +
-      'Run `anchormd init` (without --no-qmd) to enable QMD search.\n' +
-      'Use `anchormd read <plan>` or `anchormd ls` to find plans manually.'
+      'QMD search is not available (sqlite-vec extension missing).\n' +
+      'Run `anchormd init --no-qmd` to disable QMD, or install sqlite-vec for your platform.\n' +
+      'Use `anchormd read <plan>` or `anchormd ls` to browse plans without search.'
     );
   }
 
