@@ -16,10 +16,10 @@ import { rebuildAndWriteIndex, readIndex } from './index-graph.js';
 import { getQmdStore, deriveCollectionName, ensureCollection, reindexQmd, searchQmd } from './qmd.js';
 import { scaffold } from './scaffold.js';
 import { color, formatPlanTable, formatSearchResults, formatStatus } from './format.js';
-import type { PlanStatus } from './types.js';
+import type { PlanStatus, IndexGraph } from './types.js';
 import { VALID_STATUSES } from './types.js';
 
-const VERSION = '0.2.1';
+const VERSION = '0.3.0';
 
 const program = new Command();
 
@@ -317,6 +317,29 @@ program
     }));
   });
 
+// ─── graph ───────────────────────────────────────────────────────────────────
+
+program
+  .command('graph')
+  .description('Visualize the plan relationship graph')
+  .option('--dot', 'Output in Graphviz DOT format')
+  .action((options) => {
+    const { projectRoot } = ensureProjectInitialized();
+    const anchorDir = getAnchorDir(projectRoot);
+
+    const graph = readIndex(anchorDir);
+    if (!graph || Object.keys(graph.nodes).length === 0) {
+      console.error(color.dim('No plans indexed. Run `anchormd reindex` first.'));
+      process.exit(1);
+    }
+
+    if (options.dot) {
+      console.log(generateDot(graph));
+    } else {
+      console.log(generateMermaid(graph));
+    }
+  });
+
 // ─── Section extraction helper ───────────────────────────────────────────────
 
 /**
@@ -368,6 +391,130 @@ function extractSection(body: string, sectionSlug: string): string | null {
   }
 
   return captured.join('\n').trimEnd();
+}
+
+// ─── Graph generators ─────────────────────────────────────────────────────────
+
+const STATUS_STYLES: Record<string, string> = {
+  'planned': ':::planned',
+  'in-progress': ':::inprogress',
+  'built': ':::built',
+  'deprecated': ':::deprecated',
+};
+
+function generateMermaid(graph: IndexGraph): string {
+  const lines: string[] = [
+    'graph LR',
+  ];
+
+  const nodes = Object.values(graph.nodes);
+
+  // Define nodes with status-based styling
+  for (const node of nodes) {
+    const plan = (() => {
+      try {
+        const { projectRoot } = ensureProjectInitialized();
+        return readPlan(getPlansDir(projectRoot), node.name);
+      } catch { return null; }
+    })();
+    const status = plan?.frontmatter.status ?? 'planned';
+    const style = STATUS_STYLES[status] || '';
+    lines.push(`  ${node.name}["${node.name}"]${style}`);
+  }
+
+  // Track edges to avoid duplicates
+  const seen = new Set<string>();
+
+  // Strong links (solid arrows)
+  for (const node of nodes) {
+    for (const target of node.links) {
+      if (!graph.nodes[target]) continue;
+      const key = [node.name, target].sort().join('->');
+      if (seen.has(key)) continue;
+      seen.add(key);
+      lines.push(`  ${node.name} --> ${target}`);
+    }
+  }
+
+  // Weak edges (dotted lines)
+  for (const node of nodes) {
+    for (const target of node.weakEdges) {
+      if (!graph.nodes[target]) continue;
+      const key = [node.name, target].sort().join('-.-');
+      if (seen.has(key)) continue;
+      seen.add(key);
+      lines.push(`  ${node.name} -.- ${target}`);
+    }
+  }
+
+  // Style classes
+  lines.push('');
+  lines.push('  classDef planned fill:#e0f2fe,stroke:#0284c7,color:#0c4a6e');
+  lines.push('  classDef inprogress fill:#fef9c3,stroke:#ca8a04,color:#713f12');
+  lines.push('  classDef built fill:#dcfce7,stroke:#16a34a,color:#14532d');
+  lines.push('  classDef deprecated fill:#fee2e2,stroke:#dc2626,color:#7f1d1d');
+
+  return lines.join('\n');
+}
+
+function generateDot(graph: IndexGraph): string {
+  const lines: string[] = [
+    'digraph anchormd {',
+    '  rankdir=LR;',
+    '  node [shape=box, style="rounded,filled", fontname="Helvetica"];',
+    '',
+  ];
+
+  const statusColors: Record<string, string> = {
+    'planned': '#e0f2fe',
+    'in-progress': '#fef9c3',
+    'built': '#dcfce7',
+    'deprecated': '#fee2e2',
+  };
+
+  const nodes = Object.values(graph.nodes);
+
+  // Nodes
+  for (const node of nodes) {
+    const plan = (() => {
+      try {
+        const { projectRoot } = ensureProjectInitialized();
+        return readPlan(getPlansDir(projectRoot), node.name);
+      } catch { return null; }
+    })();
+    const status = plan?.frontmatter.status ?? 'planned';
+    const fillColor = statusColors[status] || '#f5f5f5';
+    lines.push(`  "${node.name}" [fillcolor="${fillColor}"];`);
+  }
+
+  lines.push('');
+
+  const seen = new Set<string>();
+
+  // Strong links
+  for (const node of nodes) {
+    for (const target of node.links) {
+      if (!graph.nodes[target]) continue;
+      const key = [node.name, target].sort().join('->');
+      if (seen.has(key)) continue;
+      seen.add(key);
+      lines.push(`  "${node.name}" -> "${target}";`);
+    }
+  }
+
+  // Weak edges
+  for (const node of nodes) {
+    for (const target of node.weakEdges) {
+      if (!graph.nodes[target]) continue;
+      const key = [node.name, target].sort().join('-.-');
+      if (seen.has(key)) continue;
+      seen.add(key);
+      lines.push(`  "${node.name}" -> "${target}" [style=dotted, color=gray];`);
+    }
+  }
+
+  lines.push('}');
+  return lines.join('\n');
 }
 
 // ─── Parse and run ───────────────────────────────────────────────────────────
