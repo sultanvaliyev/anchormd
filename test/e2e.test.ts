@@ -171,7 +171,7 @@ Deploy to production.
     expect(plan.frontmatter.status).toBe('built');
   });
 
-  it('gitignore is updated correctly', async () => {
+  it('gitignore is not modified by scaffold', async () => {
     // Create a pre-existing .gitignore
     const gitignorePath = path.join(tmpDir, '.gitignore');
     const { writeFileSync } = await import('node:fs');
@@ -180,7 +180,8 @@ Deploy to production.
     await scaffold(tmpDir, { qmd: false });
 
     const gitignoreContent = readFileSync(gitignorePath, 'utf-8');
-    expect(gitignoreContent).toContain('.anchor/search.sqlite');
+    // Central DB means no per-project search.sqlite to gitignore
+    expect(gitignoreContent).not.toContain('search.sqlite');
     expect(gitignoreContent).toContain('node_modules/');
   });
 

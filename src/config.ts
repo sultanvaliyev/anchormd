@@ -58,6 +58,7 @@ export function loadConfig(projectRoot: string): AnchorConfig {
     const parsed = JSON.parse(raw);
     return {
       qmd: typeof parsed.qmd === 'boolean' ? parsed.qmd : DEFAULT_CONFIG.qmd,
+      collectionName: typeof parsed.collectionName === 'string' ? parsed.collectionName : undefined,
     };
   } catch {
     return { ...DEFAULT_CONFIG };

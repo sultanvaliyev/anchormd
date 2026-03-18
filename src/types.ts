@@ -63,6 +63,7 @@ export interface IndexGraph {
 /** Project configuration stored in .anchor/config.json */
 export interface AnchorConfig {
   qmd: boolean;
+  collectionName?: string;
 }
 
 /** Search result from QMD or fallback */

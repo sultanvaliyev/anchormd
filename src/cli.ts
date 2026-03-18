@@ -10,16 +10,16 @@ import { tmpdir } from 'node:os';
 import { execSync } from 'node:child_process';
 import path from 'node:path';
 
-import { ensureProjectInitialized, getAnchorDir, getPlansDir } from './config.js';
+import { ensureProjectInitialized, getAnchorDir, getPlansDir, saveConfig } from './config.js';
 import { readPlan, writePlan, listPlans, parseFrontmatter, serializePlan } from './plan.js';
 import { rebuildAndWriteIndex, readIndex } from './index-graph.js';
-import { getQmdStore, reindexQmd, searchQmd } from './qmd.js';
+import { getQmdStore, deriveCollectionName, ensureCollection, reindexQmd, searchQmd } from './qmd.js';
 import { scaffold } from './scaffold.js';
 import { color, formatPlanTable, formatSearchResults, formatStatus } from './format.js';
 import type { PlanStatus } from './types.js';
 import { VALID_STATUSES } from './types.js';
 
-const VERSION = '0.1.2';
+const VERSION = '0.2.0';
 
 const program = new Command();
 
@@ -77,7 +77,6 @@ program
   .action(async (name: string, options) => {
     const { projectRoot, config } = ensureProjectInitialized();
     const plansDir = getPlansDir(projectRoot);
-    const anchorDir = getAnchorDir(projectRoot);
 
     let content: string;
 
@@ -135,8 +134,11 @@ program
 
     // Reindex QMD if enabled
     if (config.qmd) {
-      const store = await getQmdStore(anchorDir, config);
-      await reindexQmd(store);
+      const store = await getQmdStore(config);
+      if (store && config.collectionName) {
+        await ensureCollection(store, config.collectionName, plansDir);
+        await reindexQmd(store, config.collectionName);
+      }
     }
   });
 
@@ -218,8 +220,7 @@ program
   .option('--limit <n>', 'Maximum number of results', '10')
   .option('--json', 'Output as JSON')
   .action(async (query: string, options) => {
-    const { projectRoot, config } = ensureProjectInitialized();
-    const anchorDir = getAnchorDir(projectRoot);
+    const { config } = ensureProjectInitialized();
 
     let mode: 'lexical' | 'semantic' | 'hybrid' = 'lexical';
     if (options.semantic) mode = 'semantic';
@@ -227,10 +228,10 @@ program
 
     const limit = parseInt(options.limit, 10) || 10;
 
-    const store = await getQmdStore(anchorDir, config);
+    const store = await getQmdStore(config);
 
     try {
-      const results = await searchQmd(store, query, { mode, limit });
+      const results = await searchQmd(store, query, { mode, limit, collection: config.collectionName });
 
       if (options.json) {
         console.log(JSON.stringify(results, null, 2));
@@ -252,6 +253,7 @@ program
   .action(async () => {
     const { projectRoot, config } = ensureProjectInitialized();
     const anchorDir = getAnchorDir(projectRoot);
+    const plansDir = getPlansDir(projectRoot);
 
     // Rebuild index graph
     const graph = rebuildAndWriteIndex(projectRoot);
@@ -266,9 +268,20 @@ program
 
     // Reindex QMD if enabled
     if (config.qmd) {
-      const store = await getQmdStore(anchorDir, config);
-      await reindexQmd(store);
-      console.log(color.green('QMD search index updated.'));
+      const store = await getQmdStore(config);
+      if (store) {
+        // Legacy migration: derive + save collectionName if missing
+        let collectionName = config.collectionName;
+        if (!collectionName) {
+          collectionName = await deriveCollectionName(store, projectRoot);
+          config.collectionName = collectionName;
+          saveConfig(projectRoot, config);
+        }
+
+        await ensureCollection(store, collectionName, plansDir);
+        await reindexQmd(store, collectionName);
+        console.log(color.green('QMD search index updated.'));
+      }
     } else {
       console.log(color.dim('QMD search: disabled'));
     }

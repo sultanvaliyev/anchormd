@@ -4,11 +4,11 @@
  * Creates the .anchor/ directory structure and template files
  */
 
-import { existsSync, readFileSync, writeFileSync, appendFileSync, mkdirSync } from 'node:fs';
+import { existsSync, writeFileSync, mkdirSync } from 'node:fs';
 import path from 'node:path';
 import { saveConfig, getAnchorDir, getPlansDir } from './config.js';
 import { writeIndex } from './index-graph.js';
-import { getQmdStore, reindexQmd } from './qmd.js';
+import { getQmdStore, deriveCollectionName, ensureCollection, reindexQmd } from './qmd.js';
 import { color } from './format.js';
 import type { IndexGraph } from './types.js';
 
@@ -34,7 +34,7 @@ Describe your project here.
  * - .anchor/plans/ directory with template anchor.md
  * - .anchor/config.json
  * - .anchor/index.json (empty graph)
- * - Appends to .gitignore
+ * - Registers collection in central QMD database (if QMD enabled)
  */
 export async function scaffold(
   projectRoot: string,
@@ -45,9 +45,6 @@ export async function scaffold(
 
   // Create directories
   mkdirSync(plansDir, { recursive: true });
-
-  // Write config
-  saveConfig(projectRoot, { qmd: options.qmd });
 
   // Write template plan
   const templatePath = path.join(plansDir, 'anchor.md');
@@ -62,24 +59,20 @@ export async function scaffold(
   };
   writeIndex(anchorDir, emptyGraph);
 
-  // Append to .gitignore
-  const gitignorePath = path.join(projectRoot, '.gitignore');
-  const gitignoreEntry = '.anchor/search.sqlite';
+  // Initialize QMD if enabled — derive collection name, register, reindex
+  let collectionName: string | undefined;
 
-  if (existsSync(gitignorePath)) {
-    const content = readFileSync(gitignorePath, 'utf-8');
-    if (!content.includes(gitignoreEntry)) {
-      appendFileSync(gitignorePath, `\n${gitignoreEntry}\n`, 'utf-8');
-    }
-  } else {
-    writeFileSync(gitignorePath, `${gitignoreEntry}\n`, 'utf-8');
-  }
-
-  // Initialize QMD if enabled
   if (options.qmd) {
-    const store = await getQmdStore(anchorDir, { qmd: true });
-    await reindexQmd(store);
+    const store = await getQmdStore({ qmd: true });
+    if (store) {
+      collectionName = await deriveCollectionName(store, projectRoot);
+      await ensureCollection(store, collectionName, plansDir);
+      await reindexQmd(store, collectionName);
+    }
   }
+
+  // Write config (includes collectionName if QMD was set up)
+  saveConfig(projectRoot, { qmd: options.qmd, collectionName });
 
   // Print success message
   console.log(color.green('AnchorMD initialized successfully!'));
