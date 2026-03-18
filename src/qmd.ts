@@ -279,9 +279,9 @@ function parseHeadings(content: string): Array<{ slug: string; start: number; le
 
 /**
  * Find the best matching section for a query within content.
- * Returns the section slug if a strong match is found, undefined otherwise.
+ * Returns the section slug and line range if a strong match is found.
  */
-function findBestSection(content: string, query: string): string | undefined {
+function findBestSection(content: string, query: string): { slug: string; startLine: number; endLine: number } | undefined {
   const headings = parseHeadings(content);
   if (headings.length <= 1) return undefined; // No sub-sections to link to
 
@@ -291,6 +291,8 @@ function findBestSection(content: string, query: string): string | undefined {
   const lines = content.split('\n');
 
   let bestSlug: string | undefined;
+  let bestStart = 0;
+  let bestEnd = 0;
   let bestScore = 0;
 
   for (let h = 0; h < headings.length; h++) {
@@ -316,12 +318,15 @@ function findBestSection(content: string, query: string): string | undefined {
     if (score > bestScore) {
       bestScore = score;
       bestSlug = heading.slug;
+      bestStart = heading.start;
+      bestEnd = sectionEnd;
     }
   }
 
   // Only return if at least half the query terms matched
-  if (bestScore >= queryTerms.length) {
-    return bestSlug;
+  if (bestScore >= queryTerms.length && bestSlug) {
+    // Convert to 1-indexed lines
+    return { slug: bestSlug, startLine: bestStart + 1, endLine: bestEnd };
   }
 
   return undefined;
@@ -334,11 +339,11 @@ function enrichWithDeepLinks(results: SearchResult[], query: string): SearchResu
   for (const result of results) {
     if (!result.content) continue;
 
-    const sectionSlug = findBestSection(result.content, query);
-    if (sectionSlug) {
-      // Strip collection prefix and .md extension to get plan name
+    const match = findBestSection(result.content, query);
+    if (match) {
       const planName = result.path.replace(/\.md$/, '').replace(/^[^/]+\//, '');
-      result.deepLink = `${planName}#${sectionSlug}`;
+      result.deepLink = `${planName}#${match.slug}`;
+      result.lines = { start: match.startLine, end: match.endLine };
     }
   }
   return results;

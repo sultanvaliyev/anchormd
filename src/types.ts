@@ -73,4 +73,6 @@ export interface SearchResult {
   content?: string;
   /** Deep link to the most relevant section, e.g. "plan-name#section-slug" */
   deepLink?: string;
+  /** Line range of the matched section (1-indexed) */
+  lines?: { start: number; end: number };
 }

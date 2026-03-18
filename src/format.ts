@@ -102,7 +102,8 @@ export function formatSearchResults(results: SearchResult[]): string {
     lines.push(`  ${num} ${score} ${filePath}`);
 
     if (r.deepLink) {
-      lines.push(`     ${color.cyan('→')} ${color.cyan(r.deepLink)}`);
+      const lineInfo = r.lines ? color.dim(` (lines ${r.lines.start}-${r.lines.end})`) : '';
+      lines.push(`     ${color.cyan('→')} ${color.cyan(r.deepLink)}${lineInfo}`);
     }
 
     if (r.content) {
