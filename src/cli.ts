@@ -19,7 +19,7 @@ import { color, formatPlanTable, formatSearchResults, formatStatus } from './for
 import type { PlanStatus, IndexGraph } from './types.js';
 import { VALID_STATUSES } from './types.js';
 
-const VERSION = '0.3.0';
+const VERSION = '0.3.1';
 
 const program = new Command();
 
@@ -322,10 +322,12 @@ program
 program
   .command('graph')
   .description('Visualize the plan relationship graph')
+  .option('--mermaid', 'Output in Mermaid format')
   .option('--dot', 'Output in Graphviz DOT format')
   .action((options) => {
     const { projectRoot } = ensureProjectInitialized();
     const anchorDir = getAnchorDir(projectRoot);
+    const plansDir = getPlansDir(projectRoot);
 
     const graph = readIndex(anchorDir);
     if (!graph || Object.keys(graph.nodes).length === 0) {
@@ -333,10 +335,12 @@ program
       process.exit(1);
     }
 
-    if (options.dot) {
+    if (options.mermaid) {
+      console.log(generateMermaid(graph));
+    } else if (options.dot) {
       console.log(generateDot(graph));
     } else {
-      console.log(generateMermaid(graph));
+      console.log(generateTerminalGraph(graph, plansDir));
     }
   });
 
@@ -394,6 +398,66 @@ function extractSection(body: string, sectionSlug: string): string | null {
 }
 
 // ─── Graph generators ─────────────────────────────────────────────────────────
+
+function colorStatus(status: string): string {
+  switch (status) {
+    case 'built': return color.green(status);
+    case 'in-progress': return color.yellow(status);
+    case 'planned': return color.cyan(status);
+    case 'deprecated': return color.red(status);
+    default: return status;
+  }
+}
+
+function generateTerminalGraph(graph: IndexGraph, plansDir: string): string {
+  const lines: string[] = [];
+  const nodes = Object.values(graph.nodes);
+
+  for (const node of nodes) {
+    const plan = (() => {
+      try { return readPlan(plansDir, node.name); } catch { return null; }
+    })();
+    const status = plan?.frontmatter.status ?? 'planned';
+    const desc = plan?.frontmatter.description ?? '';
+
+    // Node header
+    lines.push(`  ${color.bold(node.name)}  ${colorStatus(status)}  ${color.dim(desc)}`);
+
+    // Strong links
+    for (const target of node.links) {
+      lines.push(`    ${color.cyan('-->')} ${target}`);
+    }
+
+    // Weak edges
+    for (const target of node.weakEdges) {
+      // Find shared entities
+      const targetNode = graph.nodes[target];
+      const shared: string[] = [];
+      if (targetNode) {
+        for (const e of node.entities) {
+          if (targetNode.entities.some(te => te.type === e.type && te.value === e.value)) {
+            shared.push(e.value);
+          }
+        }
+      }
+      const via = shared.length > 0 ? color.dim(` (${shared.slice(0, 2).join(', ')})`) : '';
+      lines.push(`    ${color.dim('···')} ${color.dim(target)}${via}`);
+    }
+
+    if (node.links.length === 0 && node.weakEdges.length === 0) {
+      lines.push(`    ${color.dim('(no connections)')}`);
+    }
+
+    lines.push('');
+  }
+
+  // Summary
+  const linkCount = nodes.reduce((s, n) => s + n.links.length, 0);
+  const weakCount = nodes.reduce((s, n) => s + n.weakEdges.length, 0);
+  lines.push(color.dim(`  ${nodes.length} plans, ${linkCount} links, ${weakCount} weak edges`));
+
+  return lines.join('\n');
+}
 
 const STATUS_STYLES: Record<string, string> = {
   'planned': ':::planned',
