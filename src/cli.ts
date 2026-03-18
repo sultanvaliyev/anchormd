@@ -19,7 +19,7 @@ import { color, formatPlanTable, formatSearchResults, formatStatus } from './for
 import type { PlanStatus, IndexGraph } from './types.js';
 import { VALID_STATUSES } from './types.js';
 
-const VERSION = '0.4.0';
+const VERSION = '0.4.1';
 
 const program = new Command();
 
