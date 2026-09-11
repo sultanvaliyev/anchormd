@@ -9,7 +9,7 @@
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import path from 'node:path';
 import { listPlans } from './plan.js';
-import { parseLinks, getStrongLinks } from './links.js';
+import { parseLinks } from './links.js';
 import { extractEntities } from './entities.js';
 import { getPlansDir, getAnchorDir } from './config.js';
 import type { IndexGraph, IndexGraphNode, Entity } from './types.js';
@@ -29,15 +29,15 @@ export function buildIndex(plansDir: string): IndexGraph {
   const entityToPlanMap = new Map<string, string[]>();
 
   // Build initial nodes and populate the entity map
-  const nodes: Record<string, IndexGraphNode> = {};
+  const nodes: Record<string, IndexGraphNode> = Object.create(null);
 
   for (const plan of plans) {
-    const name = plan.frontmatter.name;
+    const name = plan.id;
     const fullContent = plan.body;
 
     // Extract strong links (target names)
     const links = parseLinks(fullContent);
-    const strongLinks = getStrongLinks(links).map(l => l.target);
+    const strongLinks = [...new Set(links.map(l => l.target))];
 
     // Extract entities
     const entities = extractEntities(fullContent);

@@ -18,8 +18,11 @@ export interface PlanFrontmatter {
 
 /** A parsed plan file */
 export interface PlanFile {
+  /** Slash-separated path relative to .anchor/plans/, without .md. */
+  id: string;
   frontmatter: PlanFrontmatter;
   body: string;
+  /** Relative Markdown filename, including any parent folders. */
   filename: string;
 }
 

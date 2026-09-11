@@ -8,6 +8,7 @@
  */
 
 import type { Link, StrongLink, DeepLink } from './types.js';
+import { normalizePlanId } from './plan-path.js';
 
 const LINK_REGEX = /\[\[([^\]]+)\]\]/g;
 
@@ -47,6 +48,12 @@ export function parseLinks(content: string): Link[] {
       key = raw;
     }
 
+    try {
+      link.target = normalizePlanId(link.target);
+    } catch {
+      throw new Error(`Invalid wiki link [[${raw}]]: targets must be paths rooted at .anchor/plans/, without absolute paths or dot segments.`);
+    }
+    key = isDeepLink(link) ? `${link.target}#${link.section}` : link.target;
     if (!seen.has(key)) {
       seen.add(key);
       links.push(link);

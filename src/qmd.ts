@@ -14,6 +14,8 @@ import { existsSync, mkdirSync } from 'node:fs';
 import { execSync } from 'node:child_process';
 import { color } from './format.js';
 import type { AnchorConfig, SearchResult } from './types.js';
+import { normalizePlanId } from './plan-path.js';
+import { parseFrontmatter } from './plan.js';
 
 // We can't use the actual QMDStore type at the top level since the import
 // itself may fail (sqlite-vec). Use an opaque wrapper instead.
@@ -22,7 +24,7 @@ export type QmdStore = {
   embed(): Promise<{ docsProcessed: number; chunksEmbedded: number; errors: number; durationMs: number }>;
   searchLex(query: string, opts: { limit: number; collection?: string }): Promise<Array<{ displayPath: string; score: number; body: string }>>;
   searchVector(query: string, opts: { limit: number; collection?: string }): Promise<Array<{ displayPath: string; score: number; body: string }>>;
-  search(opts: { query: string; limit: number; collection?: string }): Promise<Array<{ displayPath: string; score: number; bestChunk: string }>>;
+  search(opts: { query: string; limit: number; collection?: string }): Promise<Array<{ displayPath: string; score: number; bestChunk: string; body?: string }>>;
   addCollection(name: string, opts: { path: string; pattern?: string }): Promise<void>;
   removeCollection(name: string): Promise<boolean>;
   listCollections(): Promise<Array<{ name: string; pwd: string; glob_pattern: string; doc_count: number; active_count: number; last_modified: string | null; includeByDefault: boolean }>>;
@@ -333,20 +335,46 @@ function findBestSection(content: string, query: string): { slug: string; startL
 }
 
 /**
- * Enrich search results with deep links to the best matching section.
+ * Normalize a QMD display path without removing any nested plan folders.
  */
-function enrichWithDeepLinks(results: SearchResult[], query: string): SearchResult[] {
-  for (const result of results) {
-    if (!result.content) continue;
+export function qmdPathToPlanId(displayPath: string, collection?: string): string {
+  let filename = displayPath.replace(/\\/g, '/');
+  if (filename.startsWith('qmd://')) {
+    const match = filename.match(/^qmd:\/\/([^/]+)\/(.+)$/);
+    if (!match || (collection && match[1] !== collection)) {
+      throw new Error(`QMD result "${displayPath}" does not belong to collection "${collection ?? '(unknown)'}".`);
+    }
+    filename = match[2];
+  } else if (collection && filename.startsWith(collection + '/')) {
+    filename = filename.slice(collection.length + 1);
+  }
+  return normalizePlanId(filename.replace(/\.md$/, ''));
+}
 
-    const match = findBestSection(result.content, query);
+type QmdSearchResult = SearchResult & { documentBody?: string };
+
+function enrichWithDeepLinks(results: QmdSearchResult[], query: string, collection?: string): SearchResult[] {
+  return results.map(({ documentBody, ...result }) => {
+    result.path = result.path.replace(/\\/g, '/');
+    let planName = qmdPathToPlanId(result.path, collection);
+    const document = documentBody ?? result.content;
+    // QMD lowercases/slugifies filenames. Required plan metadata preserves the
+    // original canonical spelling, including capitals, spaces and underscores.
+    let metadataName: string | undefined;
+    if (document) {
+      try { metadataName = parseFrontmatter(document).frontmatter.name; } catch { /* Non-plan result. */ }
+    }
+    if (metadataName) planName = normalizePlanId(metadataName);
+    result.deepLink = planName;
+    if (!document) return result;
+
+    const match = findBestSection(document, query);
     if (match) {
-      const planName = result.path.replace(/\.md$/, '').replace(/^[^/]+\//, '');
       result.deepLink = `${planName}#${match.slug}`;
       result.lines = { start: match.startLine, end: match.endLine };
     }
-  }
-  return results;
+    return result;
+  });
 }
 
 /**
@@ -379,7 +407,7 @@ export async function searchQmd(
     effectiveMode = 'lexical';
   }
 
-  let mapped: SearchResult[];
+  let mapped: QmdSearchResult[];
 
   switch (effectiveMode) {
     case 'lexical': {
@@ -412,10 +440,11 @@ export async function searchQmd(
         path: r.displayPath,
         score: r.score,
         content: r.bestChunk,
+        documentBody: r.body,
       }));
       break;
     }
   }
 
-  return enrichWithDeepLinks(mapped, query);
+  return enrichWithDeepLinks(mapped, query, options.collection);
 }

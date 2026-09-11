@@ -1,4 +1,4 @@
 node_modules/
 dist/
-.anchor/
-plans/
+# Track this package's own context; relationship indexes are generated.
+.anchor/index.json

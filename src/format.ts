@@ -49,7 +49,7 @@ function stripAnsi(s: string): string {
  */
 export function formatPlanRow(plan: PlanFile): string {
   const status = colorStatus(plan.frontmatter.status);
-  return `  ${color.bold(plan.frontmatter.name)}  ${status}  ${color.dim(plan.frontmatter.description)}`;
+  return `  ${color.bold(plan.id)}  ${status}  ${color.dim(plan.frontmatter.description)}`;
 }
 
 /**
@@ -61,7 +61,7 @@ export function formatPlanTable(plans: PlanFile[]): string {
   }
 
   // Calculate column widths
-  const nameWidth = Math.max(...plans.map(p => p.frontmatter.name.length), 4);
+  const nameWidth = Math.max(...plans.map(p => p.id.length), 4);
   const statusWidth = Math.max(...plans.map(p => p.frontmatter.status.length), 6);
 
   const lines: string[] = [];
@@ -73,7 +73,7 @@ export function formatPlanTable(plans: PlanFile[]): string {
 
   // Rows
   for (const plan of plans) {
-    const name = color.bold(plan.frontmatter.name.padEnd(nameWidth));
+    const name = color.bold(plan.id.padEnd(nameWidth));
     const status = colorStatus(plan.frontmatter.status);
     // Pad status accounting for ANSI codes
     const statusPad = ' '.repeat(Math.max(0, statusWidth - plan.frontmatter.status.length));

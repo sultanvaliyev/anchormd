@@ -1,6 +1,6 @@
 {
   "name": "anchormd",
-  "version": "0.4.2",
+  "version": "0.5.0",
   "type": "module",
   "description": "Persistent project context for AI coding agents using linked markdown plans with hybrid search",
   "main": "src/cli.ts",
@@ -10,7 +10,8 @@
   "scripts": {
     "build": "bun build src/cli.ts --outdir dist --target bun --external @tobilu/qmd",
     "dev": "bun run src/cli.ts",
-    "test": "bun test"
+    "test": "bun test",
+    "typecheck": "tsc --noEmit"
   },
   "files": [
     "src/",
@@ -42,6 +43,7 @@
     "yaml": "^2.8.0"
   },
   "devDependencies": {
-    "bun-types": "^1.2.0"
+    "bun-types": "^1.2.0",
+    "typescript": "^5.9.3"
   }
 }
